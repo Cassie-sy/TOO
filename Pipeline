@@ -1,2 +1,139 @@
-##### Data Processing:
+##** Data Processing:**
+
+###**  1. combine methylation ratio data**
+####      6 type samples (5 GI cancer & healthy) vs. 80M CpG sites
+          bash **data_combine.sh**
+'''
+            for f in `cat /zfssz2/BC_RD_P3/SHUJI/shiying/Test/RC449K-20220304/dir.txt`
+            do
+              FILENAME=`basename ${f%%.*}`
+              awk -v i=$FILENAME '{if(NR>1) print i"\t"$1"\t"$2"\t"$3"\t"$5}' ${f} >> /zfssz2/BC_RD_P3/SHUJI/shiying/Test/RC449K-20220304/data_combine_449K_40.txt
+            done
+'''
+
+###**  2. Inter CpGs**
+           qsub -cwd -l vf=60g,p=1 -binding linear:1 -P P17Z10300N0416 -q b2c_rd.q "/zfssz4/B2C_RD_H1/shiying/Pan-project/80M/**awk_1.sh**"
+'''
+            \#!/bin/bash
+            awk '{s[$6]++} END {for (i in s) print i, s[i]}' "/zfssz4/B2C_RD_H1/shiying/Pan-project/80M/Cancer6_all.txt" > /zfssz4/B2C_RD_H1/shiying/Pan-project/80M/tag_cnt_total_2.txt
+            sort -n /zfssz4/B2C_RD_H1/shiying/Pan-project/80M/tag_cnt_total_2.txt | awk '{print $1}' | uniq | wc -l      ---->   2818410
+            sort -n /zfssz4/B2C_RD_H1/shiying/Pan-project/80M/tag_cnt_total_2.txt | uniq | awk '$2==1283{print $0}' > /zfssz4/B2C_RD_H1/shiying/Pan-project/80M/tag_cnt_allin.txt
+            join -1 6 -2 1 -o 1.{1,2,3,4,5,6} <(sort -k 6 /zfssz4/B2C_RD_H1/shiying/Pan-project/80M/data_combine_80M_GC116_tag.txt)  <(sort -k 1 /zfssz4/B2C_RD_H1/shiying/Pan-project/80M/tag_cnt_allin.txt) > /zfssz4/B2C_RD_H1/shiying/Pan-project/80M/data_combine_80M_GC116_tagin.txt
+
+            awk '
+            BEGIN{PROCINFO["sorted_in"] = "@ind_num_asc"}
+            {row[$1]=1;col[$6]=1;val[$1" "$6]=$4}
+            END { printf "%s",""; for (j in col) { printf "%s",j }; printf "\n"
+                for (i in row) {
+                    printf "%s",i; for (j in col) { printf "%8.3f",val[i" "j] }; printf "\n"
+                }
+            }' /zfssz4/B2C_RD_H1/shiying/Pan-project/80M/data_combine_80M_GC116_tagin.txt > /zfssz4/B2C_RD_H1/shiying/Pan-project/80M/data_combine_80M_GC116_mtx.txt
+'''
+            qsub -cwd -l vf=60g,p=1 -binding linear:1 -P P17Z10300N0416 -q b2c_rd.q "/zfssz4/B2C_RD_H1/shiying/Pan-project/80M/**awk_hcc.sh**"
+'''
+            \#!/bin/bash
+            dos2unix "/zfssz4/B2C_RD_H1/shiying/Pan-project/80M/data_combine_80M_HCC304_tag.txt"
+            join -1 6 -2 1 -o 1.{1,2,3,4,5,6} <(sort -k 6 /zfssz4/B2C_RD_H1/shiying/Pan-project/80M/data_combine_80M_HCC304_tag.txt)  <(sort -k 1 /zfssz4/B2C_RD_H1/shiying/Pan-project/80M/tag_cnt_allin.txt) > /zfssz4/B2C_RD_H1/shiying/Pan-project/80M/data_combine_80M_HCC304_tagin.txt
+
+            awk '
+            BEGIN{PROCINFO["sorted_in"] = "@ind_num_asc"}
+            {row[$1]=1;col[$6]=1;val[$1" "$6]=$4}
+            END { printf "%s",""; for (j in col) { printf "%s",j }; printf "\n"
+                for (i in row) {
+                    printf "%s",i; for (j in col) { printf "%8.3f",val[i" "j] }; printf "\n"
+                }
+            }' /zfssz4/B2C_RD_H1/shiying/Pan-project/80M/data_combine_80M_HCC304_tagin.txt > /zfssz4/B2C_RD_H1/shiying/Pan-project/80M/data_combine_80M_HCC304_mtx.txt
+            comm -12 data_combine_80M_Healthy242_mtx.txt data_combine_80M_ESCA129_mtx.txt --output-delimiter=$'\t' --nocheck-order > common
+'''
+
+###**  3. Compute AUC**
+          bash **col_out.sh**
+'''
+          \#!/bin/bash
+          tail -n+2 /zfssz4/B2C_RD_H1/shiying/Pan-project/80M/data_combine_80M_PACA255_mtx.txt | tr -s " " | cut -d' ' -f 2-180000 > /zfssz4/B2C_RD_H1/shiying/Pan-project/80M/can_f1.txt
+          tail -n+2 /zfssz4/B2C_RD_H1/shiying/Pan-project/80M/data_combine_80M_Healthy242_mtx.txt | tr -s " " | cut -d' ' -f 2-180000 > /zfssz4/B2C_RD_H1/shiying/Pan-project/80M/hls_f1.txt
+          tail -n+2 /zfssz4/B2C_RD_H1/shiying/Pan-project/80M/data_combine_80M_PACA255_mtx.txt | tr -s " " | cut -d' ' -f 180001-360000 > /zfssz4/B2C_RD_H1/shiying/Pan-project/80M/can_f2.txt
+          ...
+'''
+          bash **auc_1cancer_1fl.sh**
+'''
+          /hwfssz4/BC_PUB/Software/03.Soft_ALL/R-3.5.1/bin/Rscript  "/zfssz4/B2C_RD_H1/shiying/Pan-project/80M/**cancer1_f1_auc.r**" "/zfssz4/B2C_RD_H1/shiying/Pan-project/80M/can_f1.txt" "/zfssz4/B2C_RD_H1/shiying/Pan-project/80M/hls_f1.txt" "/zfssz4/B2C_RD_H1/shiying/Pan-project/80M/cancer_fl_out/can5type_f1_out.txt"
+'''
+          **cancer1_f1_auc.r**
+'''
+          \#!/usr/bin/env Rscript
+          args = commandArgs(trailingOnly=TRUE)
+          can = read.table(args[1], header=F)
+          hls = read.table(args[2], header=F)
+          library(ROCR)
+          library(pROC)
+          auc.df = as.data.frame(matrix(0, nrow=ncol(can), ncol=5))
+          for(i in 1:ncol(can)){
+              print(paste("CpG ---> ", i, "/", nrow(auc.df), sep=""))
+              out = c(rep("Cancer", nrow(can)), rep("Healthy", nrow(hls)))
+              out = factor(out, levels=c("Healthy", "Cancer"))
+              met = as.numeric(c(can[, i], hls[, i]))
+              pred = prediction(met, out)
+              auc = performance(pred,'auc')@y.values
+              auc.df[i, 1] = auc[[1]][1]
+              auc.df[i, 2] = mean(can[, i])
+              auc.df[i, 3] = mean(hls[, i])
+              auc.df[i, 4] = median(can[, i])
+              auc.df[i, 5] = median(hls[, i])
+          }
+          write.table(auc.df, args[3], sep="\t", row.names = FALSE, col.names=FALSE, quote = FALSE)
+'''
+
+###**  4. Arrange Data**
+          bash **awk_hls.sh**
+'''
+          paste can5type_f11_out.txt canCRC237_f11_out.txt canESCA129_f11_out.txt canGC116_f11_out.txt canHCC304_f11_out.txt canPACA255_f11_out.txt \
+          |awk -v FS='\t' '{print \
+          $1, $6, $11, $16, $21, $26, \
+          $7, $12, $17, $22, $27, $8, \
+          $9, $14, $19, $24, $29, $10}' > can5type_f11_filout.txt
+          
+          cat can5type_f1_filout.txt can5type_f2_filout.txt can5type_f3_filout.txt can5type_f4_filout.txt can5type_f5_filout.txt\
+           can5type_f6_filout.txt can5type_f7_filout.txt can5type_f8_filout.txt can5type_f9_filout.txt can5type_f10_filout.txt can5type_f11_filout.txt\
+          > can5type_filout.txt
+          
+          paste ../common can5type_filout.txt > can5type_filout_cpg.txt
+          awk -v F='\t' '{print $1,$2,$3}' can5type_filout_cpg.txt | less
+          
+          awk -v OFS="\t" '{print $1,-$2+1,-$3+1,-$4+1,-$5+1,-$6+1,-$7+1,\
+          $8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19}' can5type_filout_cpg.txt > can5type_filout_cpg_auc.txt
+          
+          sort -n -r -k 2 -t $'\t' can5type_filout_cpg_auc.txt > can5type_filout_cpg_sort_auc.txt
+          
+          \#  CpG  GI_AUC   CRC237_AUC  ESCA129_AUC GC116_AUC   HCC304_AUC  PACA255_AUC CRC237_Mean ESCA129_Mean GC116_Mean   HCC304_Mean  PACA255_Mean Healthy242_Mean CRC237_Median ESCA129_Median GC116_Median   HCC304_Median  PACA255_Median Healthy242_Median
+'''
+
+###**  5. Extract Data**
+          bash "/zfssz4/B2C_RD_H1/shiying/Pan-project/80M/marker383/**combine.sh**"
+'''
+          cd /zfssz4/B2C_RD_H1/shiying/Pan-project/80M/marker383/
+          /zfssz4/B2C_RD_H1/jingfang/analysis/dm/shell/merge_methyratio_dmr_v1.sh  -i ../cpg6382_80M.bed -f "/zfssz4/B2C_RD_H1/shiying/Pan-project/80M/marker6382/Healthy_path.txt" -d /zfssz4/B2C_RD_H1/shiying/Pan-project/80M/marker6382/Healthy
+          /zfssz4/B2C_RD_H1/jingfang/analysis/dm/shell/merge_methyratio_dmr_v1.sh  -i ../cpg6382_80M.bed -f "/zfssz4/B2C_RD_H1/shiying/Pan-project/80M/marker6382/CRC_path.txt" -d /zfssz4/B2C_RD_H1/shiying/Pan-project/80M/marker6382/CRC
+          /zfssz4/B2C_RD_H1/jingfang/analysis/dm/shell/merge_methyratio_dmr_v1.sh  -i ../cpg6382_80M.bed -f "/zfssz4/B2C_RD_H1/shiying/Pan-project/80M/marker6382/HCC_path.txt" -d /zfssz4/B2C_RD_H1/shiying/Pan-project/80M/marker6382/HCC
+          /zfssz4/B2C_RD_H1/jingfang/analysis/dm/shell/merge_methyratio_dmr_v1.sh  -i ../cpg6382_80M.bed -f "/zfssz4/B2C_RD_H1/shiying/Pan-project/80M/marker6382/PACA_path.txt" -d /zfssz4/B2C_RD_H1/shiying/Pan-project/80M/marker6382/PACA
+          /zfssz4/B2C_RD_H1/jingfang/analysis/dm/shell/merge_methyratio_dmr_v1.sh  -i ../cpg6382_80M.bed -f "/zfssz4/B2C_RD_H1/shiying/Pan-project/80M/marker6382/ESCA_path.txt" -d /zfssz4/B2C_RD_H1/shiying/Pan-project/80M/marker6382/ESCA
+          /zfssz4/B2C_RD_H1/jingfang/analysis/dm/shell/merge_methyratio_dmr_v1.sh  -i ../cpg6382_80M.bed -f "/zfssz4/B2C_RD_H1/shiying/Pan-project/80M/marker6382/GC_path.txt" -d /zfssz4/B2C_RD_H1/shiying/Pan-project/80M/marker6382/GC
+
+          for f in `cat /zfssz4/B2C_RD_H1/shiying/Pan-project/80M/marker6382/GC_res.txt`
+          do
+            FILENAME=`basename ${f%%.*}`
+            awk -v i=$FILENAME '{if(NR>1) print i"\t"$1"\t"$3"\t"$5"\t"$6"\t"$1"-"$3}' ${f} >> /zfssz4/B2C_RD_H1/shiying/Pan-project/80M/marker6382/GC/data_combine_80MCpG6382_GC116.txt
+          done
+          
+          awk '
+          BEGIN{PROCINFO["sorted_in"] = "@ind_num_asc"}
+          {row[$1]=1;col[$6]=1;val[$1" "$6]=$5}
+          END { printf "%s",""; for (j in col) { printf "%s",j }; printf "\n"
+              for (i in row) {
+                  printf "%s",i; for (j in col) { printf "%8.3f",val[i" "j] }; printf "\n"
+              }
+          }' /zfssz4/B2C_RD_H1/shiying/Pan-project/80M/marker6382/ESCA/data_combine_80MCpG6382_ESCA129.txt | sed -e 's/\s\+/\t/g' > /zfssz4/B2C_RD_H1/shiying/Pan-project/80M/marker6382/ESCA/data_combine_80MCpG6382_ESCA129_mtx.txt
+          wc -l "/zfssz4/B2C_RD_H1/shiying/Pan-project/80M/marker6382/ESCA/data_combine_80MCpG6382_ESCA129_mtx.txt"
+          awk 'END{print NF}' "/zfssz4/B2C_RD_H1/shiying/Pan-project/80M/marker6382/ESCA/data_combine_80MCpG6382_ESCA129_mtx.txt"
+'''
   
